@@ -1,0 +1,14 @@
+requests
+edge-tts
+vosk
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client
+tweepy
+vk_api
+python-dotenv
+moviepy
+Pillow
+openai>=1.0.0
+
+

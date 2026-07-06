@@ -1,0 +1,59 @@
+name: Daily Long-Form Video with YouTube Upload
+
+on:
+  schedule:
+    - cron: "0 5 * * *"   # 8:00 AM MSK
+    - cron: "0 13 * * *"  # 4:00 PM MSK
+  workflow_dispatch:
+
+jobs:
+  generate-and-upload:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+        cache: 'pip'
+
+    - name: Install FFmpeg
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg fonts-dejavu-core
+
+    - name: Cache Vosk Model
+      uses: actions/cache@v3
+      with:
+        path: vosk-model-small-ru-0.22
+        key: vosk-ru-model-${{ runner.os }}
+
+    - name: Install dependencies
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Generate video
+      env:
+        POLLINATIONS_API_KEY: ${{ secrets.POLLINATIONS_API_KEY }}
+      run: |
+        python main.py
+
+    - name: Commit updated topics file
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add topics.txt
+        git diff --staged --quiet || git commit -m "Auto-update: Remove used topic from queue [skip ci]"
+        git push
+
+    - name: Upload to YouTube
+      env:
+        YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+        YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+        YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+      run: |
+        python upload_to_youtube.py

@@ -1,0 +1,36 @@
+# Ignore OAuth credentials
+client_secrets.json
+youtube_credentials.json
+token.pickle
+*.pickle
+.env
+meta_credentials.env
+all_meta_pages.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Output files
+output/
+images/
+*.mp4
+*.jpg
+*.png
+
+# Keep audio directory structure
+!audio/.gitkeep
+audio/*.mp3
+audio/*.wav
+
+# Vosk speech model (downloaded at runtime)
+vosk-model-small-ru-0.22/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
