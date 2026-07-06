@@ -67,9 +67,6 @@ def upload_to_youtube(video_file, title, description, tags, category_id='22'):
         }
     }
     
-    if '#Shorts' not in body['snippet']['description']:
-        body['snippet']['description'] += '\n\n#Shorts'
-    
     media = MediaFileUpload(
         str(video_file),
         chunksize=-1,
@@ -92,6 +89,19 @@ def upload_to_youtube(video_file, title, description, tags, category_id='22'):
     
     print(f"[youtube] ✅ Uploaded! Video ID: {response['id']}")
     print(f"[youtube] URL: https://youtube.com/shorts/{response['id']}")
+    
+    # Upload thumbnail if available
+    thumbnail_file = Path('output/thumbnail.jpg')
+    if thumbnail_file.exists():
+        try:
+            print("[youtube] Uploading thumbnail...")
+            youtube.thumbnails().set(
+                videoId=response['id'],
+                media_body=MediaFileUpload(str(thumbnail_file), mimetype='image/jpeg')
+            ).execute()
+            print("[youtube] ✅ Thumbnail uploaded")
+        except Exception as e:
+            print(f"[youtube] ⚠️ Thumbnail upload failed: {e}")
     
     return response
 
