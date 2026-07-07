@@ -1,0 +1,90 @@
+name: Upload Thumbnails to Previous Videos
+
+on:
+  workflow_dispatch:
+    inputs:
+      video1_id:
+        description: 'First video ID (e.g. vl84qXeZhTg)'
+        required: true
+        default: 'vl84qXeZhTg'
+      video1_topic:
+        description: 'First video topic (e.g. Женщины-библиотекари античности)'
+        required: true
+        default: 'Женщины-библиотекари античности'
+      video2_id:
+        description: 'Second video ID (optional)'
+        required: false
+        default: '5MQrSiE_tJE'
+      video2_topic:
+        description: 'Second video topic (optional)'
+        required: false
+        default: 'Женщины в Древнем Сардах'
+
+jobs:
+  upload-thumbnails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: |
+          pip install --upgrade pip
+          pip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client openai Pillow requests
+      - name: Generate & upload thumbnails
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+        run: |
+          python -c "
+import os, sys, base64, io, json
+from pathlib import Path
+import requests
+from PIL import Image
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+import openai
+
+videos = [
+    {'id': '${{ github.event.inputs.video1_id }}', 'topic': '${{ github.event.inputs.video1_topic }}'},
+]
+
+if '${{ github.event.inputs.video2_id }}' and '${{ github.event.inputs.video2_id }}' != '':
+    videos.append({'id': '${{ github.event.inputs.video2_id }}', 'topic': '${{ github.event.inputs.video2_topic }}'})
+
+OPENAI_KEY = os.environ['OPENAI_API_KEY']
+YT_CLIENT_ID = os.environ['YT_CLIENT_ID']
+YT_CLIENT_SECRET = os.environ['YT_CLIENT_SECRET']
+YT_REFRESH_TOKEN = os.environ['YT_REFRESH_TOKEN']
+
+for v in videos:
+    print(f'Generating thumbnail for: {v[\"topic\"]}')
+    client = openai.OpenAI(api_key=OPENAI_KEY)
+    prompt = f'YouTube thumbnail for historical video {v[\"topic\"]}, ancient women, cinematic, dramatic lighting, gold colors, 16:9'
+    resp = client.images.generate(model='gpt-image-2', prompt=prompt, size='1792x1024', quality='standard', n=1)
+    raw = None
+    if resp.data[0].url:
+        raw = requests.get(resp.data[0].url, timeout=60).content
+    elif resp.data[0].b64_json:
+        raw = base64.b64decode(resp.data[0].b64_json)
+    img = Image.open(io.BytesIO(raw))
+    thumb = Path(f'/tmp/thumb.jpg')
+    img.save(thumb, format='JPEG', quality=75)
+    print(f'  Thumbnail: {thumb.stat().st_size // 1024}KB')
+
+    creds = Credentials(None, refresh_token=YT_REFRESH_TOKEN,
+                        token_uri='https://oauth2.googleapis.com/token',
+                        client_id=YT_CLIENT_ID, client_secret=YT_CLIENT_SECRET,
+                        scopes=['https://www.googleapis.com/auth/youtube'])
+    creds.refresh(Request())
+    youtube = build('youtube', 'v3', credentials=creds)
+    youtube.thumbnails().set(videoId=v['id'], media_body=MediaFileUpload(str(thumb), mimetype='image/jpeg')).execute()
+    print(f'  Uploaded to https://youtube.com/shorts/{v[\"id\"]}')
+    thumb.unlink()
+print('Done!')
+"
