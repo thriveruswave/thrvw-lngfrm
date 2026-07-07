@@ -6,6 +6,9 @@ on:
     - cron: "0 13 * * *"  # 4:00 PM MSK
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   generate-and-upload:
     runs-on: ubuntu-latest
@@ -48,6 +51,7 @@ jobs:
         git config --local user.name "github-actions[bot]"
         git add topics.txt
         git diff --staged --quiet || git commit -m "Auto-update: Remove used topic from queue [skip ci]"
+        git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
         git push
 
     - name: Upload to YouTube
