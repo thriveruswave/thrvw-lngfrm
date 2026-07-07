@@ -746,11 +746,16 @@ def generate_thumbnail(topic):
         )
         if resp.data[0].url:
             r = requests.get(resp.data[0].url, timeout=60)
-            with open(THUMBNAIL_FILE, "wb") as f:
-                f.write(r.content)
+            raw = r.content
         elif resp.data[0].b64_json:
-            with open(THUMBNAIL_FILE, "wb") as f:
-                f.write(base64.b64decode(resp.data[0].b64_json))
+            raw = base64.b64decode(resp.data[0].b64_json)
+        else:
+            raw = None
+        if raw:
+            from PIL import Image
+            import io
+            img = Image.open(io.BytesIO(raw))
+            img.save(THUMBNAIL_FILE, format='JPEG', quality=75)
         print(f"[thumbnail] ✅ Generated ({THUMBNAIL_FILE.stat().st_size // 1024}KB)")
     except Exception as e:
         print(f"[thumbnail] ❌ Failed: {e}")
