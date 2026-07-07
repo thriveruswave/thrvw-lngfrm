@@ -66,7 +66,7 @@ for v in videos:
     print(f'Generating thumbnail for: {v[\"topic\"]}')
     client = openai.OpenAI(api_key=OPENAI_KEY)
     prompt = f'YouTube thumbnail for historical video {v[\"topic\"]}, ancient women, cinematic, dramatic lighting, gold colors, 16:9'
-    resp = client.images.generate(model='gpt-image-2', prompt=prompt, size='1792x1024', quality='standard', n=1)
+    resp = client.images.generate(model='gpt-image-2', prompt=prompt, size='1792x1024', quality='high', n=1)
     raw = None
     if resp.data[0].url:
         raw = requests.get(resp.data[0].url, timeout=60).content
