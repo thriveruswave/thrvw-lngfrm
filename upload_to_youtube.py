@@ -94,10 +94,22 @@ def upload_to_youtube(video_file, title, description, tags, category_id='22'):
     thumbnail_file = Path('output/thumbnail.jpg')
     if thumbnail_file.exists():
         try:
-            print("[youtube] Uploading thumbnail...")
+            import io
+            from PIL import Image
+            img = Image.open(thumbnail_file)
+            # Compress to stay under YouTube's 2MB limit
+            thumb_bytes = io.BytesIO()
+            quality = 85
+            img.save(thumb_bytes, format='JPEG', quality=quality)
+            while thumb_bytes.tell() > 2097152 and quality > 10:
+                quality -= 10
+                thumb_bytes = io.BytesIO()
+                img.save(thumb_bytes, format='JPEG', quality=quality)
+            thumb_bytes.seek(0)
+            print(f"[youtube] Uploading thumbnail ({thumb_bytes.tell() // 1024}KB, quality={quality})...")
             youtube.thumbnails().set(
                 videoId=response['id'],
-                media_body=MediaFileUpload(str(thumbnail_file), mimetype='image/jpeg')
+                media_body=MediaFileUpload(thumb_bytes, mimetype='image/jpeg', resumable=False)
             ).execute()
             print("[youtube] ✅ Thumbnail uploaded")
         except Exception as e:
