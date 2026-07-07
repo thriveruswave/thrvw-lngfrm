@@ -42,6 +42,7 @@ jobs:
     - name: Generate video
       env:
         POLLINATIONS_API_KEY: ${{ secrets.POLLINATIONS_API_KEY }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
         python main.py
 
