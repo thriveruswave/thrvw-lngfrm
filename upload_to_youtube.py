@@ -10,7 +10,7 @@ from pathlib import Path
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
+from googleapiclient.http import MediaFileUpload, MediaIoBaseUpload
 import datetime
 
 # Configure UTF-8 encoding for console output (fixes Russian text display)
@@ -109,7 +109,7 @@ def upload_to_youtube(video_file, title, description, tags, category_id='22'):
             print(f"[youtube] Uploading thumbnail ({thumb_bytes.tell() // 1024}KB, quality={quality})...")
             youtube.thumbnails().set(
                 videoId=response['id'],
-                media_body=MediaFileUpload(thumb_bytes, mimetype='image/jpeg', resumable=False)
+                media_body=MediaIoBaseUpload(thumb_bytes, mimetype='image/jpeg', resumable=False)
             ).execute()
             print("[youtube] ✅ Thumbnail uploaded")
         except Exception as e:
