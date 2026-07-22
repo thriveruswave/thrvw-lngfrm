@@ -9,7 +9,6 @@ from urllib.parse import quote
 import requests
 import time
 from dotenv import load_dotenv
-import openai
 
 # Load environment variables
 load_dotenv()
@@ -20,9 +19,6 @@ load_dotenv()
 POLLINATIONS_API_KEY = os.getenv("POLLINATIONS_API_KEY", "")
 TEXT_MODEL = "gemini-fast"  # Google Gemini 2.5 Flash Lite
 IMAGE_MODEL = "flux"  # Flux (high quality, photorealistic)
-
-# OpenAI Configuration (for thumbnail generation)
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 NUM_IMAGES = 8  # 8 unique scenes (faster generation)
 IMAGE_WIDTH = 1920  # Full HD width
@@ -726,39 +722,42 @@ def merge_audio():
 THUMBNAIL_FILE = OUTPUT_DIR / "thumbnail.jpg"
 
 def generate_thumbnail(topic):
-    """Generate YouTube thumbnail using OpenAI gpt-image-2."""
-    if not OPENAI_API_KEY:
-        print("[thumbnail] ⚠️  OPENAI_API_KEY not set, skipping thumbnail generation")
+    """Generate YouTube thumbnail using Pollinations AI gpt-image-2."""
+    if not POLLINATIONS_API_KEY:
+        print("[thumbnail] ⚠️  POLLINATIONS_API_KEY not set, skipping thumbnail generation")
         return
 
-    print("[thumbnail] Generating thumbnail with gpt-image-2...")
-    try:
-        oclient = openai.OpenAI(api_key=OPENAI_API_KEY)
-        prompt = (
-            f"YouTube thumbnail for a Russian historical video titled '{topic}'. "
-            f"Ancient women in historical setting, dramatic cinematic lighting, "
-            f"professional clickable thumbnail, high contrast, sharp details, "
-            f"gold and warm colors, 16:9 widescreen, photorealistic"
-        )
-        resp = oclient.images.generate(
-            model="gpt-image-2", prompt=prompt,
-            size="1792x1024", quality="high", n=1
-        )
-        if resp.data[0].url:
-            r = requests.get(resp.data[0].url, timeout=60)
-            raw = r.content
-        elif resp.data[0].b64_json:
-            raw = base64.b64decode(resp.data[0].b64_json)
-        else:
-            raw = None
-        if raw:
-            from PIL import Image
-            import io
-            img = Image.open(io.BytesIO(raw))
-            img.save(THUMBNAIL_FILE, format='JPEG', quality=75)
-        print(f"[thumbnail] ✅ Generated ({THUMBNAIL_FILE.stat().st_size // 1024}KB)")
-    except Exception as e:
-        print(f"[thumbnail] ❌ Failed: {e}")
+    print("[thumbnail] Generating thumbnail with gpt-image-2 via Pollinations...")
+    prompt = (
+        f"YouTube thumbnail for a Russian historical video titled '{topic}'. "
+        f"Ancient women in historical setting, dramatic cinematic lighting, "
+        f"professional clickable thumbnail, high contrast, sharp details, "
+        f"gold and warm colors, 16:9 widescreen, photorealistic"
+    )
+    for attempt in range(4):
+        try:
+            resp = requests.post("https://gen.pollinations.ai/v1/images/generations", json={
+                "model": "gpt-image-2",
+                "prompt": prompt,
+                "n": 1,
+                "size": "1792x1024",
+            }, headers={"Authorization": f"Bearer {POLLINATIONS_API_KEY}"}, timeout=300)
+            if resp.status_code == 200 and resp.json().get("data"):
+                from PIL import Image
+                import io
+                raw = base64.b64decode(resp.json()["data"][0]["b64_json"])
+                img = Image.open(io.BytesIO(raw)).convert("RGB")
+                img = img.resize((1920, 1080), Image.LANCZOS)
+                img.save(THUMBNAIL_FILE, format='JPEG', quality=85)
+                print(f"[thumbnail] ✅ Generated ({THUMBNAIL_FILE.stat().st_size // 1024}KB)")
+                return
+        except Exception as e:
+            msg = str(e)[:60]
+            if attempt < 3:
+                print(f"[thumbnail] Attempt {attempt+1} failed ({msg}), retrying...")
+                time.sleep(10 * (attempt + 1))
+            else:
+                print(f"[thumbnail] ❌ Failed after 4 attempts: {msg}")
 
 def main():
     ensure_dirs()
