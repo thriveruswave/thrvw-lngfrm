@@ -50,8 +50,10 @@ def get_authenticated_service():
     
     return build('youtube', 'v3', credentials=creds)
 
-def upload_to_youtube(video_file, title, description, tags, category_id='22'):
+def upload_to_youtube(video_file, title, description, tags=None, category_id='22'):
     """Upload video to YouTube and return result."""
+    if tags is None:
+        tags = ['История', 'Древний мир', 'Женщины в истории', 'History', 'Ancient History']
     youtube = get_authenticated_service()
     
     body = {

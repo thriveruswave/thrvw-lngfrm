@@ -1,8 +1,11 @@
 """
-VELOCITY LANGUAGE - Unified Social Media Upload Script
+AUTOMATED HISTORICAL VIDEO MULTI-PLATFORM UPLOADER
+Supports: YouTube, Instagram Reels, Facebook, VK, Telegram, Twitter, Threads, TikTok
 """
 
-import os, sys, json
+import os
+import sys
+import json
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
@@ -36,271 +39,123 @@ for mod_name, func_name, key in modules:
         except ImportError:
             continue
     if not uploaders.get(key):
-        print(f"[!] {mod_name} not available")
+        print(f"[!] {mod_name} module not loaded")
 
 
-def get_latest_reel():
+def get_latest_video():
+    """Find generated video file and metadata."""
     fv = Path("output/final_video.mp4")
     if fv.exists():
-        meta = {"story": "", "story_gr": "", "topic": ""}
-        se = Path("output/story_en.txt")
-        if se.exists():
-            with open(se, encoding="utf-8") as f: meta["story"] = f.read()
-        sg = Path("output/story.txt")
-        if sg.exists():
-            with open(sg, encoding="utf-8") as f: meta["story_gr"] = f.read()
+        meta = {"story": "", "story_ru": "", "topic": ""}
+        
         tp = Path("output/topic.txt")
         if tp.exists():
-            with open(tp, encoding="utf-8") as f: meta["topic"] = f.read()
-        return {"video_path": str(fv), "metadata": meta, "category": meta.get("topic", "Daily Story"), "phrases": [], "words": [], "lang_field": "native"}
+            meta["topic"] = tp.read_text(encoding="utf-8").strip()
+            
+        st = Path("output/story.txt")
+        if st.exists():
+            meta["story_ru"] = st.read_text(encoding="utf-8").strip()
+            
+        se = Path("output/story_en.txt")
+        if se.exists():
+            meta["story"] = se.read_text(encoding="utf-8").strip()
+            
+        return {
+            "video_path": str(fv),
+            "topic": meta.get("topic") or "Ancient History",
+            "metadata": meta
+        }
+        
     video_dir = Path("output/video")
-    if not video_dir.exists(): return None
-    reels = list(video_dir.glob("*/final_reel.mp4"))
-    if not reels: return None
-    latest = max(reels, key=lambda p: p.stat().st_mtime)
-    meta = {}
-    mf = latest.parent / "metadata.json"
-    if mf.exists():
-        with open(mf, encoding="utf-8") as f: meta = json.load(f)
-    phrases = meta.get("phrases", [])
-    words = meta.get("words", [])
-    lang_field = None
-    if phrases:
-        for key in phrases[0]:
-            if key not in ("english", "transliteration", "category"):
-                lang_field = key
-                break
-    return {"video_path": str(latest), "metadata": meta, "category": meta.get("category_english", meta.get("channel", "Learning")), "phrases": phrases, "words": words, "lang_field": lang_field or "native"}
+    if video_dir.exists():
+        reels = list(video_dir.glob("*/final_reel.mp4"))
+        if reels:
+            latest = max(reels, key=lambda p: p.stat().st_mtime)
+            meta = {}
+            mf = latest.parent / "metadata.json"
+            if mf.exists():
+                with open(mf, encoding="utf-8") as f:
+                    meta = json.load(f)
+            return {
+                "video_path": str(latest),
+                "topic": meta.get("topic", meta.get("category_english", "Ancient History")),
+                "metadata": meta
+            }
+            
+    return None
 
 
-LANGUAGE_MAP = {
-    "slovn": "Slovenian", "slovenian": "Slovenian",
-    "heb": "Hebrew", "hebrew": "Hebrew",
-    "dut": "Dutch", "dutch": "Dutch",
-    "tam": "Tamil", "tamil": "Tamil",
-    "kan": "Kannada", "kannada": "Kannada",
-    "bos": "Bosnian", "bosnian": "Bosnian",
-    "viet": "Vietnamese", "vietnamese": "Vietnamese",
-    "fili": "Filipino", "filipino": "Filipino",
-    "indo": "Indonesian", "indonesian": "Indonesian",
-    "alb": "Albanian", "albanian": "Albanian",
-    "slvk": "Slovak", "slovak": "Slovak",
-    "ser": "Serbian", "serbian": "Serbian",
-    "afr": "Afrikaans", "afrikaans": "Afrikaans",
-    "catln": "Catalan", "catalan": "Catalan",
-    "hung": "Hungarian", "hungarian": "Hungarian",
-    "cze": "Czech", "czech": "Czech",
-    "wel": "Welsh", "welsh": "Welsh",
-    "rom": "Romanian", "romanian": "Romanian",
-    "guj": "Gujarati", "gujarati": "Gujarati",
-    "swah": "Swahili", "swahili": "Swahili",
-    "ice": "Icelandic", "icelandic": "Icelandic",
-    "tha": "Thai", "thai": "Thai",
-    "tel": "Telugu", "telugu": "Telugu",
-    "fny": "Greek", "french": "French",
-    "tur": "Turkish", "turkish": "Turkish",
-    "ukr": "Ukrainian", "ukrainian": "Ukrainian",
-    "pol": "Polish", "polish": "Polish",
-    "gre": "Greek", "greek": "Greek",
-    "hin": "Hindi", "hindi": "Hindi",
-    "ben": "Bengali", "bengali": "Bengali",
-    "urd": "Urdu", "urdu": "Urdu",
-    "per": "Persian", "persian": "Persian",
-    "mar": "Marathi", "marathi": "Marathi",
-    "telu": "Telugu",
-    "mal": "Malayalam", "malayalam": "Malayalam",
-    "chi": "Chinese", "chin": "Chinese", "chinese": "Chinese", "zh": "Chinese",
-    "rus": "Russian", "russian": "Russian",
-    "fre": "French", "french": "French",
-    "swe": "Swedish", "swedish": "Swedish",
-    "kor": "Korean", "korean": "Korean",
-    "spa": "Spanish", "spanish": "Spanish",
-    "ukr": "Ukrainian", "ukrainian": "Ukrainian",
-    "nor": "Norwegian", "norwegian": "Norwegian",
-    "gre": "Greek", "greek": "Greek",
-    "finn": "Finnish", "finnish": "Finnish",
-    "dan": "Danish", "danish": "Danish",
-    "ger": "German", "german": "German",
-    "him": "Hindi", "hindi": "Hindi",
-    "pol": "Polish", "polish": "Polish",
-    "por": "Portuguese", "portuguese": "Portuguese",
-    "ita": "Italian", "italian": "Italian",
-    "Geo": "Georgian", "georgian": "Georgian", "geo": "Georgian",
-}
-
-
-def get_language_name(phrases, lang_field):
-    try:
-        import subprocess
-        remote = subprocess.check_output(["git", "config", "--get", "remote.origin.url"], stderr=subprocess.DEVNULL).decode().strip()
-        import re
-        m_repo = re.search(r'/([^/]+?)(?:\.git)?$', remote)
-        if m_repo:
-            repo = m_repo.group(1).lower()
-            parts = re.split(r'[-_\s]', repo)
-            if len(parts) >= 2:
-                code = parts[-1]
-                if code in LANGUAGE_MAP:
-                    return LANGUAGE_MAP[code]
-                code = parts[0]
-                if code in LANGUAGE_MAP:
-                    return LANGUAGE_MAP[code]
-            if repo in LANGUAGE_MAP:
-                return LANGUAGE_MAP[repo]
-        m = re.search(r'(?:^|/|\b)(?:velocity|vel|Vel|Ve|vdl|vei|xn)[_-]?([a-z]{2,8})(?:_|-|\.|$|/)', remote, re.IGNORECASE)
-        if m:
-            code = m.group(1).lower()
-            if code in LANGUAGE_MAP:
-                return LANGUAGE_MAP[code]
-    except Exception:
-        pass
-    if lang_field in LANGUAGE_MAP:
-        return LANGUAGE_MAP[lang_field]
-    if phrases and lang_field:
-        sample = phrases[0].get(lang_field, "").lower()
-        for code, name in LANGUAGE_MAP.items():
-            if code in sample:
-                return name
-    return lang_field.capitalize()
-
-
-FALLBACK_PHRASES = [
-    "Believe in yourself", "You are capable of amazing things", "Dream big, start small",
-    "Never give up on your dreams", "Love yourself first", "Love makes everything possible",
-    "Rise with the dawn", "Courage lives within", "Action beats fear", "Today is yours",
-    "Strength grows in silence", "Heart speaks softly", "Love needs no words",
-    "Warmth fills the soul", "Kind eyes see all", "Gentle hands heal",
-    "Work speaks louder", "Focus wins battles", "Discipline builds empires",
-    "Habits shape destiny", "Excellence is a choice", "Silence teaches patience",
-    "Questions open doors", "Listening brings wisdom", "Stillness reveals truth",
-    "Time heals confusion", "Joy hides in moments", "Smile lights the way",
-    "Laughter heals wounds", "Gratitude multiplies joy", "Peace starts within",
-    "Grow one percent daily", "Small steps matter", "Progress not perfection",
-    "Learn from yesterday", "Better than before", "Appreciate this moment",
-    "Thankful for breath", "Notice what remains", "Grateful for now",
-    "Count present blessings", "Friends walk together", "Shared laughter bonds",
-    "Presence speaks volumes", "Together we stand", "Your hand in mine",
-    "Light follows darkness", "Spring comes after winter", "Tomorrow brings new chances",
-    "Seeds grow underground", "Stars shine brightest at night", "Create without fear",
-    "Ideas flow freely", "Make something today", "Art lives in you", "Express your truth",
-    "Breathe into stillness", "Calm resides within", "Let thoughts pass by",
-    "Find your center", "Peace is available", "Stand tall today",
-    "Trust your instincts", "You know enough", "Speak with conviction", "Own your space",
-    "Continue despite pain", "Endurance builds character", "Keep walking slowly",
-    "Storms pass eventually", "Roots hold in wind", "Beauty surrounds you",
-    "Notice the details", "Wonder is everywhere", "Be moved by life",
-    "Marvel at existence", "Choose light daily", "Focus on good", "Radiate kindness",
-    "Spread warmth around", "Live with intention", "Face what scares",
-    "Bravery is a choice", "Step into discomfort", "Fear means growth", "Do it afraid",
-    "Offer help freely", "Listen with care", "Speak gently always",
-    "Notice who struggles", "Give without expecting", "Wait with purpose",
-    "Trust the timing", "Rushing rarely helps", "Allow the process", "Rest is productive",
-    "Release the grudge", "Free yourself first", "Let anger go", "Healing begins now",
-    "Choose peace over right", "Resilience is learned", "Bend don't break",
-    "Pressure makes diamonds", "Survival is art", "You've survived all days",
-    "Delight in small things", "Savor this bite", "Laugh at nothing", "Play is necessary",
-    "Celebrate being alive", "Rest equals work", "Neither extreme lasts",
-    "Find your middle", "Too much harms", "Moderation preserves",
-    "Discomfort signals change", "Stretch then rest", "New skills feel awkward",
-    "Plateaus are normal", "Growth isn't linear", "Meaning is made",
-    "Serve something larger", "Your gifts matter", "Contribute daily", "Why drives what",
-    "Notice your breath", "Feel your feet", "Hear the silence", "See without labeling",
-    "Be here now", "Simple pleasures bring joy", "Feeling light truly happy",
-    "Sparkling eyes full of life", "A sweet feeling lasts long", "Pure content right now",
-]
-
-
-def detect_phrase_source(phrases):
-    if not phrases:
-        return "unknown"
-    first = phrases[0].get("english", "")
-    for fb in FALLBACK_PHRASES:
-        if first.startswith(fb) or first == fb:
-            return "fallback"
-    return "ai"
-
-
-def generate_caption(phrases, category, lang_field="native", words=None, metadata=None, platform="facebook"):
-    if metadata and metadata.get("story"):
-        story_gr = metadata.get("story_gr", "")
-        story_en = metadata.get("story", "")
-        topic = metadata.get("topic", "History")
-        tag = "ancienthistory"
-        base = [f"Ancient History: {topic}", ""]
-        if story_gr:
-            base.append(story_gr.strip())
-            base.append("")
-            base.append("--- English Translation ---")
-            base.append("")
-        if story_en:
-            base.append(story_en.strip())
-            base.append("")
-        base.extend(["Like & follow for daily history!", ""])
-        base.extend(["#" + tag, "#history", "#ancienthistory", "#greekhistory", "#womenshistory"])
-        return "\n".join(base)
-    if words:
-        channel = category
-        tag = channel.lower().replace(" ", "")
-        base = [f"{channel.upper()} - Unlock English Vocabulary!", "", f"Today's words:", ""]
-        for i, w in enumerate(words[:3], 1):
-            word = w.get("word", "")
-            root = w.get("root", "")
-            root_m = w.get("root_meaning", "")
-            pos = w.get("part_of_speech", "")
-            definition = w.get("definition", "")
-            example = w.get("example", "")
-            base.append(f"{i}. {word.upper()} ({pos})")
-            base.append(f"   {definition}")
-            if root and root_m:
-                base.append(f"   Root: {root} = {root_m}")
-            base.append(f"   \"{example}\"")
-            base.append("")
-        base.extend(["Like & follow for daily vocabulary!", ""])
-        base.extend([f"#{tag}", f"#{tag}daily", "#vocabulary", "#englishlearning", "#wordroots", "#learnenglish"])
-        return "\n".join(base)
-    lang_name = get_language_name(phrases, lang_field)
-    lang_tag = lang_name.lower().replace(" ", "")
-    if platform == "instagram":
-        base = [f"Learn {lang_name} with VELOCITY {lang_name.upper()}!", "", f"Category: {category}", ""]
-        for i, p in enumerate(phrases[:3], 1):
-            base.append(f"{i}. {p['english']}")
-            base.append(f"   {p.get(lang_field, '')}")
-            base.append("")
-        base.extend(["Which phrase is your favorite? 👇", f"Follow for daily {lang_name} lessons!", ""])
-        base.extend([f"#learn{lang_tag}", f"#{lang_tag}lessons", "#languagelearning", f"#velocity{lang_tag}", f"#daily{lang_tag}"])
-        return "\n".join(base)
-    base = [f"Learn {lang_name} with VELOCITY {lang_name.upper()}!", "", f"Category: {category}", "", f"Master {lang_name} one phrase at a time! Today's {category} lesson:", ""]
-    for i, p in enumerate(phrases[:5], 1):
-        base.append(f"{i}. {p['english']}")
-        base.append(f"   {p.get(lang_field, '')}")
-        base.append(f"   [{p.get('transliteration', '')}]")
+def generate_caption(topic, metadata=None, platform="facebook"):
+    """Generate a clean historical video caption with hashtags."""
+    topic_str = topic or "Ancient History"
+    story_ru = metadata.get("story_ru", "") if metadata else ""
+    story_en = metadata.get("story", "") if metadata else ""
+    
+    base = [f"📜 {topic_str}", ""]
+    
+    if story_ru:
+        base.append(story_ru.strip())
         base.append("")
-    base.extend(["Tip: Repeat each phrase out loud 3 times!", "Like this video if you learned something new!", "Comment your favorite phrase below!", "Follow for daily lessons!", ""])
-    base.extend([f"#learn{lang_tag}", f"#{lang_tag}lessons", f"#{lang_tag}forbeginners", "#languagelearning", f"#{lang_tag}vocabulary", f"#velocity{lang_tag}", f"#daily{lang_tag}", f"#{lang_tag}", "#learnlanguages"])
+        
+    if story_en and story_en != story_ru:
+        base.append("--- English Translation ---")
+        base.append("")
+        base.append(story_en.strip())
+        base.append("")
+        
+    base.extend([
+        "Like & follow for daily history facts! 🏛️✨",
+        "",
+        "#history #ancienthistory #historyfacts #historylovers #historical #ancient"
+    ])
+    
     return "\n".join(base)
 
 
-def upload_to_all_platforms(video_path, caption, category, phrases=None, lang_field="native", words=None, metadata=None):
-    lang_name = get_language_name(phrases or [], lang_field)
-    results = {"timestamp": datetime.now().isoformat(), "category": category, "video": video_path, "uploads": {}, "platforms_attempted": [], "platforms_successful": [], "platforms_skipped": [], "platforms_failed": [], "timing": {}, "phrase_source": detect_phrase_source(phrases) if phrases else "unknown"}
+def upload_to_all_platforms(video_path, caption, topic, metadata=None):
+    results = {
+        "timestamp": datetime.now().isoformat(),
+        "topic": topic,
+        "video": video_path,
+        "uploads": {},
+        "platforms_attempted": [],
+        "platforms_successful": [],
+        "platforms_skipped": [],
+        "platforms_failed": [],
+        "timing": {}
+    }
+    
     print("\n" + "="*80)
-    print(f"VELOCITY {lang_name.upper()} - MULTI-PLATFORM UPLOAD")
+    print(f"HISTORICAL VIDEO MULTI-PLATFORM UPLOADER - Topic: {topic}")
     print("="*80)
-    if not Path(video_path).exists(): print(f"Video not found"); return results
-    platforms = [("facebook", "fb", "Facebook"), ("instagram", "ig", "Instagram"), ("youtube", "yt", "YouTube"), ("vk", "vk", "VK"), ("telegram", "tg", "Telegram"), ("twitter", "tw", "Twitter"), ("threads", "th", "Threads"), ("tiktok", "tk", "TikTok")]
+    
+    if not Path(video_path).exists():
+        print(f"❌ Video not found: {video_path}")
+        return results
+        
+    platforms = [
+        ("youtube", "yt", "YouTube"),
+        ("facebook", "fb", "Facebook"),
+        ("instagram", "ig", "Instagram"),
+        ("vk", "vk", "VK"),
+        ("telegram", "tg", "Telegram"),
+        ("twitter", "tw", "Twitter"),
+        ("threads", "th", "Threads"),
+        ("tiktok", "tk", "TikTok")
+    ]
+    
     for pname, key, dname in platforms:
         results["platforms_attempted"].append(pname)
         func = uploaders.get(key)
-        if func:
+        if func or pname == "youtube":
             try:
                 t_start = datetime.now()
+                print(f"\n🚀 Uploading to {dname}...")
+                
                 if pname == "youtube":
-                    try:
-                        from upload_to_youtube import generate_video_metadata
-                        yt_title, yt_desc, yt_tags = generate_video_metadata(category, len(phrases) if phrases else 5, phrases)
-                        r = func(video_path=video_path, title=yt_title, description=yt_desc, tags=yt_tags, category_id='22')
-                    except Exception:
-                        r = func(video_path=video_path, title=caption[:100], description=caption)
+                    from upload_to_youtube import upload_to_youtube
+                    tags = ["История", "Древний мир", "Женщины в истории", "History", "Ancient History"]
+                    r = upload_to_youtube(video_file=video_path, title=topic[:100], description=caption, tags=tags)
                 elif pname == "vk":
                     r = func(video_path=video_path, description=caption)
                 elif pname == "telegram":
@@ -310,40 +165,58 @@ def upload_to_all_platforms(video_path, caption, category, phrases=None, lang_fi
                 elif pname == "threads":
                     r = func(video_path=video_path, text=caption)
                 elif pname == "tiktok":
-                    r = func(video_path=video_path, description=caption, title=caption[:100])
+                    r = func(video_path=video_path, description=caption, title=topic[:100])
                 elif pname == "facebook":
                     r = func(video_path=video_path, description=caption)
                 elif pname == "instagram":
-                    ig_cap = generate_caption(phrases, category, lang_field, words if words else None, metadata if metadata else None, platform="instagram")
-                    r = func(video_path=video_path, caption=ig_cap, is_story=False)
+                    r = func(video_path=video_path, caption=caption, is_story=False)
+                    
                 t_end = datetime.now()
                 t_sec = round((t_end - t_start).total_seconds())
                 results["timing"][pname] = f"{t_sec}s"
+                
                 if r:
                     results["uploads"][pname] = r
                     results["platforms_successful"].append(pname)
-                else: results["platforms_failed"].append(pname)
+                    print(f"✅ {dname}: SUCCESS")
+                else:
+                    results["platforms_failed"].append(pname)
+                    print(f"❌ {dname}: FAILED")
             except Exception as e:
                 results["uploads"][pname] = {"status": "failed", "error": str(e)}
                 results["platforms_failed"].append(pname)
+                print(f"❌ {dname}: ERROR ({e})")
         else:
             results["uploads"][pname] = {"status": "skipped"}
             results["platforms_skipped"].append(pname)
-    s = len(results["platforms_successful"]); f = len(results["platforms_failed"]); sk = len(results["platforms_skipped"])
-    print(f"\nSUMMARY: {s} success, {f} failed, {sk} skipped")
+            
+    s = len(results["platforms_successful"])
+    f = len(results["platforms_failed"])
+    sk = len(results["platforms_skipped"])
+    print(f"\n" + "="*80)
+    print(f"SUMMARY: {s} successful, {f} failed, {sk} skipped")
+    print("="*80)
+    
     rf = Path("output") / f"upload_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     rf.parent.mkdir(exist_ok=True)
-    with open(rf, "w", encoding="utf-8") as f: json.dump(results, f, indent=2, ensure_ascii=False)
+    with open(rf, "w", encoding="utf-8") as f_out:
+        json.dump(results, f_out, indent=2, ensure_ascii=False)
+        
     return results
 
 
 def main():
     print("\n" + "="*80)
-    print("VELOCITY LANGUAGE - AUTOMATED UPLOAD")
+    print("HISTORICAL VIDEO - AUTOMATED MULTI-PLATFORM UPLOADER")
     print("="*80)
-    reel = get_latest_reel()
-    if not reel: print("No reel found"); sys.exit(1)
-    caption = generate_caption(reel['phrases'], reel['category'], reel['lang_field'], reel.get('words'), reel.get('metadata'))
-    upload_to_all_platforms(reel['video_path'], caption, reel['category'], reel['phrases'], reel['lang_field'], reel.get('words'), reel.get('metadata'))
+    
+    vdata = get_latest_video()
+    if not vdata:
+        print("❌ No video file found in output/ directory.")
+        sys.exit(1)
+        
+    caption = generate_caption(vdata['topic'], vdata.get('metadata'))
+    upload_to_all_platforms(vdata['video_path'], caption, vdata['topic'], vdata.get('metadata'))
 
-if __name__ == "__main__": main()
+if __name__ == "__main__":
+    main()
