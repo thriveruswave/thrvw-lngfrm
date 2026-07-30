@@ -107,9 +107,13 @@ def generate_story_with_pollinations(topic: str) -> str:
     if not POLLINATIONS_API_KEY:
         raise ValueError("POLLINATIONS_API_KEY not set! Get your API key from https://enter.pollinations.ai")
     
-    # Use OpenAI-compatible endpoint for paid API
-    url = "https://gen.pollinations.ai/v1/chat/completions"
+def generate_story_with_pollinations(topic: str) -> str:
+    """Generate a short Russian story about ancient women's history using PAID API with model fallback."""
     
+    if not POLLINATIONS_API_KEY:
+        raise ValueError("POLLINATIONS_API_KEY not set! Get your API key from https://enter.pollinations.ai")
+    
+    url = "https://gen.pollinations.ai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {POLLINATIONS_API_KEY}",
         "Content-Type": "application/json"
@@ -121,98 +125,43 @@ def generate_story_with_pollinations(topic: str) -> str:
         "Расскажи о реальных исторических фактах, законах, обычаях или традициях. "
         "Используй живой, увлекательный стиль с деталями и примерами. Без заголовков."
     )
-    
     user_prompt = f"Тема: {topic}. Расскажи подробную интересную историю с историческими фактами."
     
-    payload = {
-        "model": TEXT_MODEL,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        "temperature": 1.0,
-        "max_tokens": 500
-    }
-
+    models = ["openai", "mistral", "qwen", "gemini-fast"]
+    
     print(f"[story] Generating Russian story for topic: {topic}")
-    print(f"[story] Using model: {TEXT_MODEL} (PAID API)")
     
-    # Retry logic - paid API should be more reliable
-    max_retries = 3
-    retry_delays = [30, 60, 120]  # 30s, 1min, 2min (much faster than free API)
-    
-    last_error = None
-    
-    for attempt in range(max_retries):
+    for attempt, model in enumerate(models):
         try:
-            print(f"[story] Attempt {attempt+1}/{max_retries}...")
-            r = requests.post(url, headers=headers, json=payload, timeout=60)
+            print(f"[story] Attempt {attempt+1}/{len(models)} using model '{model}'...")
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "temperature": 0.8,
+                "max_tokens": 600
+            }
+            r = requests.post(url, headers=headers, json=payload, timeout=30)
             r.raise_for_status()
             
             response_data = r.json()
-            
-            # Extract text from OpenAI-compatible response
             if "choices" in response_data and len(response_data["choices"]) > 0:
                 text = response_data["choices"][0]["message"]["content"].strip()
-            else:
-                raise ValueError("Invalid response format from API")
-            
-            # Validate response
-            if not text or len(text) < 50:
-                raise ValueError("Story too short or empty")
-            
-            words = text.split()
-            if len(words) > STORY_MAX_WORDS:
-                text = " ".join(words[:STORY_MAX_WORDS])
-
-            with open(STORY_FILE, "w", encoding="utf-8") as f:
-                f.write(text)
-
-            print(f"[story] ✅ Russian story generated ({len(text.split())} words)")
-            
-            # Show usage info if available
-            if "usage" in response_data:
-                usage = response_data["usage"]
-                print(f"[story] 📊 Tokens used: {usage.get('total_tokens', 'N/A')}")
-            
-            return text
-            
-        except requests.exceptions.Timeout as e:
-            last_error = e
-            if attempt < max_retries - 1:
-                wait_time = retry_delays[attempt]
-                print(f"[story] ⏱️ Timeout! Retry {attempt+2}/{max_retries} in {wait_time}s...")
-                time.sleep(wait_time)
-            else:
-                print(f"[story] ❌ Failed after {max_retries} attempts (timeout)")
-                
-        except requests.exceptions.HTTPError as e:
-            last_error = e
-            status_code = e.response.status_code if e.response else "Unknown"
-            error_body = e.response.text if e.response else "No response body"
-            
-            if attempt < max_retries - 1:
-                wait_time = retry_delays[attempt]
-                print(f"[story] ❌ HTTP {status_code} Error! Retry {attempt+2}/{max_retries} in {wait_time}s...")
-                print(f"[story] Error details: {error_body[:200]}")
-                time.sleep(wait_time)
-            else:
-                print(f"[story] ❌ Failed after {max_retries} attempts: HTTP {status_code}")
-                print(f"[story] Error: {error_body}")
-                
+                if text and len(text) > 50:
+                    words = text.split()
+                    if len(words) > STORY_MAX_WORDS:
+                        text = " ".join(words[:STORY_MAX_WORDS])
+                    with open(STORY_FILE, "w", encoding="utf-8") as f:
+                        f.write(text)
+                    print(f"[story] ✅ Russian story generated with '{model}' ({len(text.split())} words)")
+                    return text
         except Exception as e:
-            last_error = e
-            if attempt < max_retries - 1:
-                wait_time = retry_delays[attempt]
-                print(f"[story] ❌ Error: {e}. Retry {attempt+2}/{max_retries} in {wait_time}s...")
-                time.sleep(wait_time)
-            else:
-                print(f"[story] ❌ Failed after {max_retries} attempts: {e}")
-    
-    # If we get here, all retries failed
-    error_msg = f"Story generation failed after {max_retries} attempts. Last error: {last_error}"
-    print(f"[story] {error_msg}")
-    raise Exception(error_msg)
+            print(f"[story] ⚠️ Model '{model}' failed: {e}")
+            time.sleep(2)
+            
+    raise RuntimeError(f"Failed to generate story for topic '{topic}' with all models.")
 
 def generate_scene_descriptions(story: str) -> list:
     """Extract distinct scene descriptions from the story sentences."""
