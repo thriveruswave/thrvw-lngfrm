@@ -285,7 +285,7 @@ def download_image_from_drive(idx: int) -> Path:
     out = IMAGES_DIR / f"scene_{idx:02d}.jpg"
     
     service_key = os.environ.get("GOOGLE_SERVICE_ACCOUNT_KEY")
-    folder_id = os.environ.get("GOOGLE_DRIVE_FOLDER_ID", "11--jW208sZFcn64y3ADIOlihoz-S2Hri")
+    folder_id = os.environ.get("GOOGLE_DRIVE_FOLDER_ID", "11--jW208sZFcn64y3ADIOlihoz-S2Hri").strip().strip('"').strip("'")
     if not folder_id:
         raise ValueError("GOOGLE_DRIVE_FOLDER_ID environment variable required")
     
