@@ -54,22 +54,51 @@ def ensure_dirs():
     for f in IMAGES_DIR.glob("*.jpg"):
         f.unlink()
 
+USED_TOPICS_FILE = Path("used_topics.txt")
+
 def choose_topic_for_today():
-    """Reads the FIRST topic, removes it from file, and returns it (Queue system)."""
+    """Reads topics, checks used_topics.txt to guarantee a NEW topic every time."""
+    if not TOPICS_FILE.exists():
+        raise ValueError("topics.txt file not found!")
+        
     with open(TOPICS_FILE, "r", encoding="utf-8") as f:
         topics = [line.strip() for line in f if line.strip()]
     
     if not topics:
-        raise ValueError("No topics found in topics.txt! Please run generate_topics.py")
+        raise ValueError("No topics found in topics.txt!")
         
-    # Pick the first one (Queue: FIFO)
-    today_topic = topics[0]
-    
-    # Write back the rest (effectively deleting the first one)
+    used_topics = set()
+    if USED_TOPICS_FILE.exists():
+        try:
+            with open(USED_TOPICS_FILE, "r", encoding="utf-8") as f:
+                used_topics = {line.strip() for line in f if line.strip()}
+        except Exception as e:
+            print(f"[topic] Warning reading used_topics.txt: {e}")
+            
+    # Find first topic not yet used
+    today_topic = None
+    remaining_topics = []
+    for t in topics:
+        if not today_topic and t not in used_topics:
+            today_topic = t
+        else:
+            remaining_topics.append(t)
+            
+    # Fallback if all topics in file were already used
+    if not today_topic:
+        today_topic = topics[0]
+        remaining_topics = topics[1:]
+        
+    # Mark as used
+    with open(USED_TOPICS_FILE, "a", encoding="utf-8") as f:
+        f.write(today_topic + "\n")
+        
+    # Write back remaining queue to topics.txt
     with open(TOPICS_FILE, "w", encoding="utf-8") as f:
-        for t in topics[1:]:
+        for t in remaining_topics:
             f.write(t + "\n")
             
+    print(f"[topic] 🎯 Selected new topic: {today_topic}")
     return today_topic
 
 def generate_story_with_pollinations(topic: str) -> str:

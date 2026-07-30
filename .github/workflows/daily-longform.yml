@@ -67,7 +67,9 @@ jobs:
       run: |
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        git add topics.txt used_topics.txt used_images.json 2>/dev/null || true
-        git diff --staged --quiet || git commit -m "🔄 Auto-update: Remove used topic from queue [skip ci]"
+        git stash --include-untracked || true
         git pull --rebase origin main || true
-        git push
+        git stash pop || true
+        git add topics.txt used_topics.txt used_images.json 2>/dev/null || true
+        git diff --staged --quiet || git commit -m "🔄 Auto-update: Track used topics and images [skip ci]"
+        git push || true
