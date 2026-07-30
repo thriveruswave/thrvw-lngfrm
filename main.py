@@ -276,144 +276,80 @@ def translate_to_english(russian_text: str) -> str:
             print(f"[translate] ❌ Translation failed after 3 attempts, using original text.")
             return russian_text
 
-def generate_image(scene: str, idx: int) -> Path:
-    """Generate a unique image for each scene using Pollinations AI PAID API with robust retry logic."""
+def download_image_from_drive(idx: int) -> Path:
+    """Download a random long-form image from Google Drive folder (weighted selection)."""
+    import json
+    from google.oauth2 import service_account
+    from googleapiclient.discovery import build
     
-    if not POLLINATIONS_API_KEY:
-        raise ValueError("POLLINATIONS_API_KEY not set! Get your API key from https://enter.pollinations.ai")
-    
-    # Translate Russian scene to English for better API stability
-    scene_english = translate_to_english(scene)
-    print(f"[image] Translated scene: {scene_english[:80]}...")
-    
-    # Create unique seed for each image based on scene content + index
-    seed = hash(scene + str(idx)) % 1000000
-    
-    # STUNNING, DETAILED PROMPT for beautiful cinematic images (like flux!)
-    prompt = (
-        f"hyper-realistic portrait of an exceptionally beautiful woman in ancient times, {scene_english}, "
-        f"face and skin detailed texture, visible pores, natural lighting, "
-        f"exquisite photorealistic masterpiece, elegant flowing ancient clothing with intricate details, "
-        f"ornate jewelry and accessories, dramatic cinematic lighting with golden hour glow, "
-        f"highly detailed face with mesmerizing eyes, flawless skin, "
-        f"historical accuracy, professional photography, shot on 35mm, volumetric lighting, "
-        f"8k ultra quality, award-winning composition, vibrant rich colors, "
-        f"sharp focus, depth of field, bokeh background, "
-        f"ethereal atmosphere, majestic presence, regal beauty, RAW photo"
-    )
-    
-    # Strong negative prompts
-    negative_prompt = (
-        "two faces, double face, multiple people, duplicate, "
-        "deformed, disfigured, ugly, blurry, bad quality, "
-        "extra face, second face, crowd, bad anatomy, cartoon, drawing, painting, illustration"
-    )
-    
-    safe_prompt = quote(prompt)
-    safe_negative = quote(negative_prompt)
-    
-    # Use paid API endpoint with authentication
     out = IMAGES_DIR / f"scene_{idx:02d}.jpg"
-    print(f"[image] Generating image {idx+1}/{NUM_IMAGES} with {IMAGE_MODEL} (PAID API): {scene[:50]}...")
     
-    # Enhanced retry logic with model switching strategy
-    # Try preferred model (flux) multiple times, then fallback to turbo
-    model_schedule = ["flux", "flux", "flux", "turbo"]
-    max_retries = len(model_schedule)
+    service_key = os.environ.get("GOOGLE_SERVICE_ACCOUNT_KEY")
+    folder_id = os.environ.get("GOOGLE_DRIVE_FOLDER_ID", "11--jW208sZFcn64y3ADIOlihoz-S2Hri")
+    if not folder_id:
+        raise ValueError("GOOGLE_DRIVE_FOLDER_ID environment variable required")
     
-    # Base deterministic seed
-    base_seed = hash(scene + str(idx)) % 1000000
+    cred = service_account.Credentials.from_service_account_info(
+        json.loads(service_key), scopes=["https://www.googleapis.com/auth/drive.readonly"]
+    )
+    service = build("drive", "v3", credentials=cred)
     
-    for attempt in range(max_retries):
-        current_model = model_schedule[attempt]
-        
-        # Modify seed on retries to avoid getting stuck on a "bad" seed
-        if attempt == 0:
-            seed = base_seed
-        else:
-            seed = base_seed + random.randint(1, 10000)
-            print(f"[image] 🎲 New seed for retry: {seed}")
-        
-        # Update model in URL
-        model_param = f"&model={current_model}" if current_model else ""
-        
-        # Reconstruct URL
-        url = (
-            f"https://gen.pollinations.ai/image/{safe_prompt}"
-            f"?width={IMAGE_WIDTH}&height={IMAGE_HEIGHT}{model_param}&seed={seed}"
-            f"&nologo=true&nofeed=true&negative={safe_negative}"
-        )
-        
-        # Add Connection: close to prevent stale connection hangs
-        headers = {
-            "Authorization": f"Bearer {POLLINATIONS_API_KEY}",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-            "Connection": "close"
-        }
-        
+    all_files = []
+    page_token = None
+    while True:
+        r = service.files().list(
+            q=f"'{folder_id}' in parents and mimeType contains 'image/'",
+            fields="files(id, name)", pageSize=200, pageToken=page_token
+        ).execute()
+        all_files.extend(r.get("files", []))
+        page_token = r.get("nextPageToken")
+        if not page_token:
+            break
+    
+    if not all_files:
+        raise RuntimeError(f"No image files found in Google Drive folder: {folder_id}")
+    
+    used_log = Path("used_images.json")
+    usage = {}
+    if used_log.exists():
         try:
-            print(f"[image] Attempt {attempt+1}/{max_retries}: Generating HD image with model='{current_model}' (typically 30-60s)...")
-            
-            # Use stream=True to handle large files and track progress
-            with requests.get(url, headers=headers, timeout=120, stream=True) as r:
-                r.raise_for_status()
-                
-                total_size = int(r.headers.get('content-length', 0))
-                downloaded = 0
-                
-                # Write chunks to file with progress indicator
-                with open(out, 'wb') as f:
-                    for chunk in r.iter_content(chunk_size=8192): 
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        if total_size > 0:
-                            percent = (downloaded / total_size) * 100
-                            print(f"\r[image] ⬇️  Downloading... {percent:.1f}% ({downloaded//1024}KB)", end="", flush=True)
-                        else:
-                            print(f"\r[image] ⬇️  Downloading... {downloaded//1024}KB", end="", flush=True)
-            
-            print() # Newline after progress matched
-            
-            # Validate file size
-            if out.stat().st_size < 1000:
-                raise ValueError("Image file too small")
-            
-            print(f"[image] ✅ Image {idx+1} generated successfully with model='{current_model}' ({out.stat().st_size//1024}KB)")
-            time.sleep(2)
-            return out
-            
-        except KeyboardInterrupt:
-            print("\n[image] 🛑 Process interrupted by user/system signal during download.")
-            raise
-            
-        except Exception as e:
-            print() # Ensure newline
-            # Capture status code if available
-            status_msg = "Error"
-            if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
-                status_msg = f"HTTP {e.response.status_code}"
-            elif isinstance(e, requests.exceptions.Timeout):
-                status_msg = "Timeout"
-                
-            print(f"[image] ❌ Attempt {attempt+1} failed ({status_msg}): {str(e)[:100]}...")
-            
-            # Clean up partial file
-            if out.exists():
-                out.unlink()
-            
-            if attempt < max_retries - 1:
-                wait_time = 2 if attempt < 2 else 5
-                print(f"[image] 🔄 Retrying in {wait_time}s with model '{model_schedule[attempt+1]}'...")
-                time.sleep(wait_time)
+            usage = json.loads(used_log.read_text())
+        except Exception:
+            usage = {}
     
-    raise Exception(f"Image {idx+1} generation failed after {max_retries} attempts")
+    for f in all_files:
+        if f["name"] not in usage:
+            usage[f["name"]] = 0
     
-    raise Exception(f"Image {idx+1} generation failed after all retries")
+    min_usage = min(usage.values())
+    weights = [1.0 / (usage[f["name"]] - min_usage + 1) for f in all_files]
+    chosen = random.choices(all_files, weights=weights, k=1)[0]
+    usage[chosen["name"]] += 1
+    used_log.write_text(json.dumps(usage, indent=2))
+    
+    print(f"[image] Downloading {chosen['name']} from Drive...", flush=True)
+    request = service.files().get_media(fileId=chosen["id"])
+    from googleapiclient.http import MediaIoBaseDownload
+    import io
+    fh = io.BytesIO()
+    downloader = MediaIoBaseDownload(fh, request)
+    done = False
+    while not done:
+        _, done = downloader.next_chunk()
+    fh.seek(0)
+    out.write_bytes(fh.read())
+    print(f"  Saved: {out.name} ({out.stat().st_size // 1024} KB)", flush=True)
+    return out
+
+def generate_image(scene: str, idx: int) -> Path:
+    """Download image from Google Drive instead of AI generation."""
+    return download_image_from_drive(idx)
 
 def generate_images(scenes: list):
-    """Generate unique images for each scene SEQUENTIALLY (avoids rate limits)"""
-    print(f"[image] Generating {NUM_IMAGES} images sequentially (avoiding rate limits)...")
+    """Download unique images for each scene from Google Drive."""
+    print(f"[image] Downloading {NUM_IMAGES} long-form images from Google Drive...")
     return [generate_image(scene, i) for i, scene in enumerate(scenes)]
+
 
 def generate_tts(story: str):
     """Generate narration using edge-tts (free Microsoft TTS)."""
@@ -721,43 +657,18 @@ def merge_audio():
 
 THUMBNAIL_FILE = OUTPUT_DIR / "thumbnail.jpg"
 
-def generate_thumbnail(topic):
-    """Generate YouTube thumbnail using Pollinations AI gpt-image-2."""
-    if not POLLINATIONS_API_KEY:
-        print("[thumbnail] ⚠️  POLLINATIONS_API_KEY not set, skipping thumbnail generation")
-        return
+def generate_thumbnail(topic=""):
+    """Choose one of the randomly downloaded images and set as YouTube thumbnail."""
+    print("[thumbnail] Selecting one of the downloaded images as YouTube thumbnail...")
+    import shutil
+    image_files = list(IMAGES_DIR.glob("*.jpg"))
+    if image_files:
+        chosen_thumb = random.choice(image_files)
+        shutil.copy2(chosen_thumb, THUMBNAIL_FILE)
+        print(f"[thumbnail] ✅ Saved {chosen_thumb.name} as thumbnail to {THUMBNAIL_FILE}")
+    else:
+        print("[thumbnail] ⚠️ No downloaded images available for thumbnail")
 
-    print("[thumbnail] Generating thumbnail with gpt-image-2 via Pollinations...")
-    prompt = (
-        f"YouTube thumbnail for a Russian historical video titled '{topic}'. "
-        f"Ancient women in historical setting, dramatic cinematic lighting, "
-        f"professional clickable thumbnail, high contrast, sharp details, "
-        f"gold and warm colors, 16:9 widescreen, photorealistic"
-    )
-    for attempt in range(4):
-        try:
-            resp = requests.post("https://gen.pollinations.ai/v1/images/generations", json={
-                "model": "gpt-image-2",
-                "prompt": prompt,
-                "n": 1,
-                "size": "1792x1024",
-            }, headers={"Authorization": f"Bearer {POLLINATIONS_API_KEY}"}, timeout=300)
-            if resp.status_code == 200 and resp.json().get("data"):
-                from PIL import Image
-                import io
-                raw = base64.b64decode(resp.json()["data"][0]["b64_json"])
-                img = Image.open(io.BytesIO(raw)).convert("RGB")
-                img = img.resize((1920, 1080), Image.LANCZOS)
-                img.save(THUMBNAIL_FILE, format='JPEG', quality=85)
-                print(f"[thumbnail] ✅ Generated ({THUMBNAIL_FILE.stat().st_size // 1024}KB)")
-                return
-        except Exception as e:
-            msg = str(e)[:60]
-            if attempt < 3:
-                print(f"[thumbnail] Attempt {attempt+1} failed ({msg}), retrying...")
-                time.sleep(10 * (attempt + 1))
-            else:
-                print(f"[thumbnail] ❌ Failed after 4 attempts: {msg}")
 
 def main():
     ensure_dirs()
